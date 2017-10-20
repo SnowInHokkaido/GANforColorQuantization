@@ -1,6 +1,4 @@
-# GANforColorQuantization
-
-# Normally, there are 2 steps in color quantization: first, define a palette based on 
+Normally, there are 2 steps in color quantization: first, define a palette based on 
 the colors of the image and then for each pixel, replace its color with a closest color 
 in the palette to generate a new image. In this project, a conditional GAN would be 
 trained. The generative network(GN) will have a structure similar to the one in Pix2pix. 
