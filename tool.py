@@ -21,6 +21,7 @@ parser.add_argument("--checkpoint", default=None, help="directory with checkpoin
 parser.add_argument("--output_filetype", default="png", choices=["png", "jpeg"])
 
 # model parameters
+# parser.add_argument("--ngf", type=int, default=64, help="number of generator filters in first conv layer")
 parser.add_argument("--mode", required=True, choices=["train", "test", "export"])   # specify do what
 parser.add_argument("--scale_size", type=int, default=286, help="scale images to this size before cropping to 256x256")
 parser.add_argument("--batch_size", type=int, default=1, help="number of images in batch")
@@ -51,17 +52,16 @@ Model = collections.namedtuple("Model", "outputs, predict_real, predict_fake, di
 
 def preprocess(image):
     with tf.name_scope("preprocess"):
-        return (image+1)/2
+        return image*2 - 1  # [0, 1] => [-1, 1]
 
 def deprocess(image):
     with tf.name_scope("deprocess"):
-        # [-1, 1] => [0, 1]
-        return (image + 1) / 2
+        return (image + 1) / 2   # [-1, 1] => [0, 1]
 
 def preprocess_lab(lab):
     with tf.name_scope("preprocess_lab"):
         L_chan, a_chan, b_chan = tf.unstack(lab, axis=2)
-        # L_chan: black and white with input range [0, 100], a_chan/b_chan: color channels with input range ~[-110, 110], not exact
+        # L_chan: black and white with input range [0, 100], a_chan/b_chan: color channels with input range ~[-110, 110], not exact => all to [-1,1] range
         return [L_chan / 50 - 1, a_chan / 110, b_chan / 110]
 
 def deprocess_lab(L_chan, a_chan, b_chan):
@@ -77,20 +77,32 @@ def augment(image, brightness):
     rgb = lab_to_rgb(lab)
     return rgb
 
-def conv(batch_input, out_channels, stride):
+###
+def conv(batch_input, out_channels, stride=1, filter_size=3):
     with tf.variable_scope("conv"):
         in_channels = batch_input.get_shape()[3]
-        filter = tf.get_variable("filter", [4, 4, in_channels, out_channels], dtype=tf.float32, initializer=tf.random_normal_initializer(0, 0.02))
-        # [batch, in_height, in_width, in_channels], [filter_width, filter_height, in_channels, out_channels] => [batch, out_height, out_width, out_channels]
+        filter = tf.get_variable("filter", [filter_size, filter_size, in_channels, out_channels], dtype=tf.float32, initializer=tf.random_normal_initializer(0, 0.02))
         padded_input = tf.pad(batch_input, [[0, 0], [1, 1], [1, 1], [0, 0]], mode="CONSTANT")
         conv = tf.nn.conv2d(padded_input, filter, [1, stride, stride, 1], padding="VALID")
         return conv
 
-def lrelu(x, a):
-    with tf.name_scope("lrelu"):
-        # leak: a*x/2 - a*abs(x)/2, linear: x/2 + abs(x)/2
-        x = tf.identity(x)
-        return (0.5 * (1 + a)) * x + (0.5 * (1 - a)) * tf.abs(x)
+def deconv(batch_input, out_channels=256, stride=2, filter_size=4):
+    with tf.variable_scope("deconv"):
+        batch,height, width, in_channels = batch_input.get_shape().as_list()
+        filter = tf.get_variable("filter", [filter_size, filter_size, in_channels, out_channels], dtype=tf.float32, initializer=tf.random_normal_initializer(0, 0.02))
+        padded_input = tf.pad(batch_input, [[0, 0], [1, 1], [1, 1], [0, 0]], mode="CONSTANT")
+        deconv = tf.nn.conv2d_transpose(padded_input, filter, [batch, height*2, width*2, out_channels], [1, stride, stride, 1], padding="VALID")
+        return deconv
+
+# def lrelu(x, a):
+#     with tf.name_scope("lrelu"):
+#         # leak: a*x/2 - a*abs(x)/2, linear: x/2 + abs(x)/2
+#         x = tf.identity(x)
+#         return (0.5 * (1 + a)) * x + (0.5 * (1 - a)) * tf.abs(x)
+        
+def relu(x):
+    with tf.name_scope("relu"):
+        return tf.nn.relu(x)
 
 def batchnorm(input):
     with tf.variable_scope("batchnorm"):
@@ -99,7 +111,7 @@ def batchnorm(input):
         channels = input.get_shape()[3]
         offset = tf.get_variable("offset", [channels], dtype=tf.float32, initializer=tf.zeros_initializer())
         scale = tf.get_variable("scale", [channels], dtype=tf.float32, initializer=tf.random_normal_initializer(1.0, 0.02))
-        mean, variance = tf.nn.moments(input, axes=[0, 1, 2], keep_dims=False)
+        mean, variance = tf.nn.moments(input, axes=[0, 1, 2], keep_dims=False)  # calc mean,variance along axes
         variance_epsilon = 1e-5
         normalized = tf.nn.batch_normalization(input, mean, variance, offset, scale, variance_epsilon=variance_epsilon)
         return normalized
@@ -145,8 +157,6 @@ def lab_to_rgb(lab):
     with tf.name_scope("lab_to_rgb"):
         lab = check_image(lab)
         lab_pixels = tf.reshape(lab, [-1, 3])
-
-        # https://en.wikipedia.org/wiki/Lab_color_space#CIELAB-CIEXYZ_conversions
         with tf.name_scope("cielab_to_xyz"):
             # convert to fxfyfz
             lab_to_fxfyfz = tf.constant([
@@ -162,7 +172,6 @@ def lab_to_rgb(lab):
             linear_mask = tf.cast(fxfyfz_pixels <= epsilon, dtype=tf.float32)
             exponential_mask = tf.cast(fxfyfz_pixels > epsilon, dtype=tf.float32)
             xyz_pixels = (3 * epsilon**2 * (fxfyfz_pixels - 4/29)) * linear_mask + (fxfyfz_pixels ** 3) * exponential_mask
-
             # denormalize for D65 white point
             xyz_pixels = tf.multiply(xyz_pixels, [0.950456, 1.0, 1.088754])
 
@@ -253,34 +262,66 @@ def load_examples():
         steps_per_epoch=steps_per_epoch,
     )
 
+###
 def create_generator(generator_inputs, generator_outputs_channels):
     layers = []
-    # encoder_1: [batch, 256, 256, in_channels] => [batch, 128, 128, ngf]
-    with tf.variable_scope("encoder_1"):
-        output = conv(generator_inputs, a.ngf, stride=2)
-        layers.append(output)
 
     layer_specs = [
-        a.ngf * 2, # encoder_2: [batch, 128, 128, ngf] => [batch, 64, 64, ngf * 2], 128
-        a.ngf * 4, # encoder_3: [batch, 64, 64, ngf * 2] => [batch, 32, 32, ngf * 4], 256
-        a.ngf * 8, # encoder_4: [batch, 32, 32, ngf * 4] => [batch, 16, 16, ngf * 8], 512
-        a.ngf * 8, # encoder_5: [batch, 16, 16, ngf * 8] => [batch, 8, 8, ngf * 8], 512
-        a.ngf * 8, # encoder_6: [batch, 8, 8, ngf * 8] => [batch, 4, 4, ngf * 8], 512
-        a.ngf * 8, # encoder_7: [batch, 4, 4, ngf * 8] => [batch, 2, 2, ngf * 8], 512
-        a.ngf * 8, # encoder_8: [batch, 2, 2, ngf * 8] => [batch, 1, 1, ngf * 8], 512
+        512, # encoder_4: [batch, 32, 32, 256] => [batch, 32, 32, 512]
+        512, # encoder_5: [batch, 32, 32, 512] => [batch, 32, 32, 512]
+        512, # encoder_6: [batch, 32, 32, 512] => [batch, 32, 32, 512]
+        512, # encoder_7: [batch, 32, 32, 512] => [batch, 32, 32, 512]
     ]
 
-    # three operations in each layer: relu, batchnorm, conv
+    with tf.variable_scope("encoder_1"):
+        conv1 = conv(generator_inputs, 64)
+        rect1 = relu(conv1)
+        conv2 = conv(rect1, 128, stride=2)
+        rect2 = relu(conv2)
+        output = batchnorm(rect2)
+        layers.append(output)
+        
+    with tf.variable_scope("encoder_2"):
+        conv1 = conv(layers[-1], 128)
+        rect1 = relu(conv1)
+        conv2 = conv(rect1, 256, stride=2)
+        rect2 = relu(conv2)
+        output = batchnorm(rect2)
+        layers.append(output)
+        
+    with tf.variable_scope("encoder_3"):
+        conv1 = conv(layers[-1], 256)
+        rect1 = relu(conv1)
+        conv2 = conv(rect1, 256)
+        rect2 = relu(conv2)
+        conv3 = conv(rect2, 512, stride=2)
+        rect3 = relu(conv3)
+        output = batchnorm(rect3)
+        layers.append(output)
+        
     for out_channels in layer_specs:
-        with tf.variable_scope("encoder_%d" % (len(layers) + 1)):
-            rectified = lrelu(layers[-1], 0.2)
-            convolved = conv(rectified, out_channels, stride=2) # half height,weight, same batch,channel
-            output = batchnorm(convolved)
+        with tf.variable_scope("encoder_%d" % (len(layers) + 3)):
+            conv1 = conv(layers[-1], out_channels)
+            rect1 = relu(conv1)
+            conv2 = conv(rect1, out_channels)
+            rect2 = relu(conv2)
+            conv3 = conv(rect2, out_channels)
+            rect3 = relu(conv3)
+            output = batchnorm(conv3)
             layers.append(output)
+
+    with tf.variable_scope("encoder_8"):
+        conv1 = deconv(layers[-1])
+        rect1 = relu(conv1)
+        conv2 = conv(rect1, 256)
+        rect2 = relu(conv2)
+        conv3 = conv(rect2, 256)
+        rect3 = relu(conv3)
+        layers.append(rect3)
 
     return layers[-1]
 
-
+###
 def create_model(inputs, targets):
     def create_discriminator(discrim_inputs, discrim_targets):
         n_layers = 3
@@ -292,7 +333,7 @@ def create_model(inputs, targets):
         # layer_1: [batch, 256, 256, in_channels * 2] => [batch, 128, 128, ndf]
         with tf.variable_scope("layer_1"):
             convolved = conv(input, a.ndf, stride=2)
-            rectified = lrelu(convolved, 0.2)
+            rectified = relu(convolved, 0.2)
             layers.append(rectified)
 
         # layer_2: [batch, 128, 128, ndf] => [batch, 64, 64, ndf * 2]
@@ -304,7 +345,7 @@ def create_model(inputs, targets):
                 stride = 1 if i == n_layers - 1 else 2  # last layer here has stride 1
                 convolved = conv(layers[-1], out_channels, stride=stride)
                 normalized = batchnorm(convolved)
-                rectified = lrelu(normalized, 0.2)
+                rectified = relu(normalized, 0.2)
                 layers.append(rectified)
 
         # layer_5: [batch, 31, 31, ndf * 8] => [batch, 30, 30, 1]
