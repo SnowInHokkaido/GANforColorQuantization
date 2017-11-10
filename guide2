@@ -1,0 +1,69 @@
+./train/train_val.prototxt
+
+img_l > data_l_meansub > data_l
+
+data_ab > data_ab_ss(conv) > data_ab_ss 
+> ab_enc(py) > gt_ab_313 > prior_boost(py) > prior_boost
+> prior_boost_nongray(Eltwise) > prior_boost_nongray
+-------------------------
+data_l 
+> bw_conv1_1(conv) > relu1_1 > conv1_2 > relu1_2 > conv1_2norm
+===
+> conv2_1 > relu2_1 > conv2_2 > relu2_2 > conv2_2norm
+===
+> conv3_1 > relu3_1 > conv3_2 > relu3_2 > conv3_3 > relu3_3 > conv3_3norm
+===
+conv4_1 > relu4_1 > conv4_2 > relu4_2 > conv4_3 > relu4_3 > conv4_3_norm
+===
+conv5_1 > relu5_1 > conv5_2 > relu5_2 > conv5_3 > relu5_3 > conv5_3_norm
+===
+conv6_1 > relu6_1 > conv6_2 > relu6_2 > conv6_3 > relu6_3 > conv6_3_norm
+===
+conv7_1 > relu7_1 > conv7_2 > relu7_2 > conv7_3 > relu7_3 > conv7_3_norm
+===
+conv8_1(Deconv) > relu8_1 > conv8_2 > relu8_2 > conv8_3 > relu8_3 
+=== Softmax ===
+> conv8_313 > conv8_313_boost(py) > loss8_313(SoftmaxCrossEntropyLoss)
+
+##################################################
+./models/colorization_deploy_v2.prototxt
+
+# note: 1-8 conv kernel_size=3, 8_1:4
+#  deconvolution_param {
+    num_output: 256
+    kernel_size: 4
+    pad: 1
+    dilation: 1
+    stride: 2
+  }
+  
+data_l(Input){224,224}
+> bw_conv1_1(conv) > relu1_1 > conv1_2[2] > relu1_2 > conv1_2norm
+===
+conv2_1 > relu2_1 > conv2_2[2] > relu2_2 > conv2_2norm
+===
+conv3_1 > relu3_1 > conv3_2 > relu3_2 > conv3_3[2] > relu3_3 > conv3_3norm
+===
+conv4_1 > relu4_1 > conv4_2 > relu4_2 > conv4_3 > relu4_3 > conv4_3_norm
+===
+conv5_1 > relu5_1 > conv5_2 > relu5_2 > conv5_3 > relu5_3 > conv5_3_norm
+===
+conv6_1 > relu6_1 > conv6_2 > relu6_2 > conv6_3 > relu6_3 > conv6_3_norm
+===
+conv7_1 > relu7_1 > conv7_2 > relu7_2 > conv7_3 > relu7_3 > conv7_3_norm
+===
+conv8_1(Deconv)[2] > relu8_1 > conv8_2 > relu8_2 > conv8_3 > relu8_3 
+=== Softmax ===
+conv8_313(conv) > conv8_313_rh(Scale) > class8_313_rh(Softmax)
+=== Decoding ===
+class8_ab(conv) > Silence(Silence)
+
+
+
+
+
+
+
+
+
+
