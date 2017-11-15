@@ -1,16 +1,8 @@
 
 # coding: utf-8
 
-# In[1]:
-
-
-# coding: utf-8
 import numpy as np
-import scipy.misc
 import tensorflow as tf
-
-
-# In[ ]:
 
 
 '''
@@ -39,9 +31,6 @@ stride改为1做卷积，得到的feature map尺寸增大一倍。
 
 
 '''
-
-
-# In[84]:
 
 
 def net(image):  ### 输入的图像不用normalization
@@ -120,10 +109,6 @@ def net(image):  ### 输入的图像不用normalization
     conv8_3_relu = conv_layer(conv8_2_relu, 256, 3, 1, relu=True)
 
     return conv8_3_relu
-
-
-# In[ ]:
-
 
 def conv_init_vars(net, out_channels, filter_size, transpose=False):
     '''
