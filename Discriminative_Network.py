@@ -19,6 +19,7 @@ def pool_layer(input):
 def get_kernels(weights,i)
 	kernels = weights[i][0][0][2][0][0]
 	kernels = np.transpose(kernels, (1, 0, 2, 3))
+    return kernels
 
 def net(image):
 
