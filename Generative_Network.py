@@ -8,12 +8,14 @@
 import numpy as np
 import scipy.misc
 import tensorflow as tf
-
-
-# In[ ]:
-
+from utils import *
 
 '''
+RGB -> ab mapping
+
+ab + l = lab
+
+
 > bw_conv1_1(conv) > relu1_1 > conv1_2(Stride:1) > relu1_2 > conv1_2norm
 ===
 > conv2_1 > relu2_1 > conv2_2 (Stride:2) > relu2_2 > conv2_2norm
@@ -29,6 +31,8 @@ conv6_1 (Stride:1,pad:2 dilation: 2)> relu6_1 > conv6_2(same) > relu6_2 > conv6_
 conv7_1(Stride:1,pad:1 dilation: 1) > relu7_1 > conv7_2 > relu7_2 > conv7_3 > relu7_3 > conv7_3_norm
 ===
 conv8_1(kernal:4 stride:2 pad:1 dilation:1) > relu8_1 > conv8_2(kernal:3 stride:1) > relu8_2 > conv8_3 > relu8_3 
+
+
 
 Testing Result：
 
@@ -118,11 +122,15 @@ def net(image):  ### 输入的图像不用normalization
     conv8_1_relu = conv_tranpose_layer(conv7_3norm, 256, 4, 2)
     conv8_2_relu = conv_layer(conv8_1_relu, 256, 3, 1, relu=True)
     conv8_3_relu = conv_layer(conv8_2_relu, 256, 3, 1, relu=True)
+    
+      conv9_1 = conv_layer(conv8_3_relu, 128, 3, 1, relu=True)
+    conv9_2 = conv_layer(conv9_1, 64, 3, 2, relu=True)
+    conv9_3 = conv_layer(conv9_2, 32, 3, 2, relu=True)
+    conv9_4 = conv_layer(conv9_3, 3, 3, 1, relu=True)
+    
 
-    return conv8_3_relu
+    return conv9_4
 
-
-# In[ ]:
 
 
 def conv_init_vars(net, out_channels, filter_size, transpose=False):
@@ -198,6 +206,11 @@ def conv_layer_dila(net, num_filters, filter_size, rate, relu=True):
     return net   
 
 def conv_tranpose_layer(net, num_filters, filter_size, strides):
+    '''
+    
+    Deconvolution operation
+    
+    '''
     weights_init = conv_init_vars(net, num_filters, filter_size, transpose=True)
 
     batch_size, rows, cols, in_channels = [i.value for i in net.get_shape()]
@@ -209,3 +222,39 @@ def conv_tranpose_layer(net, num_filters, filter_size, strides):
     net = tf.nn.conv2d_transpose(net, weights_init, tf_shape, strides_shape, padding='SAME')
     return tf.nn.relu(net)
 
+
+def main():
+    img = get_img('C:\\Users\\Orion_Peng\\Pictures\\Saved Pictures\\dog.jpg')
+    resize_input = scipy.misc.imresize(img, (256, 256))
+    resize_ output= scipy.misc.imresize(img, (64, 64))
+    
+    resize_lab = rgb2lab(resize)
+
+    inputimg = np.array([resize_lab])
+
+    inputimg = tf.cast(inputimg, tf.float32)
+
+    palette = net(inputimg)
+
+    palette  = tf.reshape(palette, [256, 1, 3])
+
+    resize_float32 = resize_ output.astype(np.float32)
+
+    resize_float32 = tf.cast(resize_float32, tf.float32)
+
+    loss = tf.reshape(tf.reduce_sum((palette[0, 0, :] - resize_float32)**2, 2), [64, 64, 1]) 
+
+    for i in range(1,256):
+        loss_ = tf.reshape(tf.reduce_sum((palette[i, 0, :] - resize_float32)**2, 2), [64, 64, 1]) 
+
+        loss = tf.concat([loss, loss_], axis = 2)
+
+    index = tf.argmin(loss, axis = 2)
+
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        output_palette = palette.eval()
+        output = index.eval()
+
+if __name__ == '__main__':
+    main()
