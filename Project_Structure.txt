@@ -1,17 +1,0 @@
-﻿.project_root/     
-|
-├── Code/               
-│   ├── .../
-│   ├── .../
-│   └── ...
-├── config/                         
-│   ├── config.ini                  
-│   └── config.ini.example        
-├── static/                    
-│   ├── VGG model/                        
-│   └── training images/
-│   
-│ 
-├── README.md                       项目说明文件
-├── requrements.txt                 项目依赖文件
-├── TODO.md                	    待完成项目

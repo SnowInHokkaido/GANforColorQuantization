@@ -10,42 +10,7 @@ import scipy.misc
 import tensorflow as tf
 from utils import *
 
-'''
-RGB -> ab mapping
 
-ab + l = lab
-
-
-> bw_conv1_1(conv) > relu1_1 > conv1_2(Stride:1) > relu1_2 > conv1_2norm
-===
-> conv2_1 > relu2_1 > conv2_2 (Stride:2) > relu2_2 > conv2_2norm
-===
-> conv3_1 > relu3_1 > conv3_2 > relu3_2 > conv3_3 (Stride:2)> relu3_3 > conv3_3norm
-===
-conv4_1 (Stride:1,pad:1 dilation: 1)> relu4_1 > conv4_2(same) > relu4_2 > conv4_3(same) > relu4_3 > conv4_3_norm
-===
-conv5_1(Stride:1,pad:2 dilation: 2) > relu5_1 > conv5_2(same) > relu5_2 > conv5_3 > relu5_3 > conv5_3_norm
-===
-conv6_1 (Stride:1,pad:2 dilation: 2)> relu6_1 > conv6_2(same) > relu6_2 > conv6_3(same) > relu6_3 > conv6_3_norm
-===
-conv7_1(Stride:1,pad:1 dilation: 1) > relu7_1 > conv7_2 > relu7_2 > conv7_3 > relu7_3 > conv7_3_norm
-===
-conv8_1(kernal:4 stride:2 pad:1 dilation:1) > relu8_1 > conv8_2(kernal:3 stride:1) > relu8_2 > conv8_3 > relu8_3 
-
-
-
-Testing Result：
-
-(1) s>1，即卷积的同时做了downsampling，卷积后图像尺寸减小；
-(2) s=1，普通的步长为1的卷积，比如在tensorflow中设置padding=SAME的话，卷积的图像输入和输出有相同的尺寸大小；
-(3) 0<s<1，fractionally strided convolution，相当于对图像做upsampling。比如s=0.5时，意味着在图像每个像素之间padding一个空白的像素后，
-stride改为1做卷积，得到的feature map尺寸增大一倍。
-
-
-'''
-
-
-# In[84]:
 
 
 def net(image):  ### 输入的图像不用normalization
@@ -81,37 +46,6 @@ def net(image):  ### 输入的图像不用normalization
     conv4_3_relu = conv_layer_dila(conv4_2_relu, 512, 3, 1, relu=True)
     conv4_3norm = batch_norm(conv4_3_relu, train=True)
 
-    '''
-
-    conv5_1(Stride:1,pad:2 dilation: 2) > relu5_1 > conv5_2(same) > relu5_2 > conv5_3 > relu5_3 > conv5_3_norm
-
-    '''
-
-    conv5_1_relu = conv_layer_dila(conv4_3norm, 512, 3, 2, relu=True)
-    conv5_2_relu = conv_layer_dila(conv5_1_relu, 512, 3, 2, relu=True)
-    conv5_3_relu = conv_layer_dila(conv5_2_relu, 512, 3, 2, relu=True)
-    conv5_3norm = batch_norm(conv5_3_relu, train=True)
-
-    '''
-
-    conv6_1 (Stride:1,pad:2 dilation: 2)> relu6_1 > conv6_2(same) > relu6_2 > conv6_3(same) > relu6_3 > conv6_3_norm
-    '''
-
-    conv6_1_relu = conv_layer_dila(conv5_3norm, 512, 3, 2, relu=True)
-    conv6_2_relu = conv_layer_dila(conv6_1_relu, 512, 3, 2, relu=True)
-    conv6_3_relu = conv_layer_dila(conv6_2_relu, 512, 3, 2, relu=True)
-    conv6_3norm = batch_norm(conv6_3_relu, train=True)
-
-    '''
-
-    conv7_1(Stride:1,pad:1 dilation: 1) > relu7_1 > conv7_2 > relu7_2 > conv7_3 > relu7_3 > conv7_3_norm
-
-    '''
-
-    conv7_1_relu = conv_layer_dila(conv6_3norm, 512, 3, 1, relu=True)
-    conv7_2_relu = conv_layer_dila(conv7_1_relu, 512, 3, 1, relu=True)
-    conv7_3_relu = conv_layer_dila(conv7_2_relu, 512, 3, 1, relu=True)
-    conv7_3norm = batch_norm(conv7_3_relu, train=True)
 
 
     '''
@@ -119,11 +53,12 @@ def net(image):  ### 输入的图像不用normalization
     conv8_1(256, kernal:4 stride:2 pad:1 dilation:1) > relu8_1 > conv8_2(kernal:3 stride:1) > relu8_2 > conv8_3
 
     '''
-    conv8_1_relu = conv_tranpose_layer(conv7_3norm, 256, 4, 2)
+    conv8_1_relu = conv_tranpose_layer(conv4_3norm, 256, 4, 2)
     conv8_2_relu = conv_layer(conv8_1_relu, 256, 3, 1, relu=True)
     conv8_3_relu = conv_layer(conv8_2_relu, 256, 3, 1, relu=True)
     
-      conv9_1 = conv_layer(conv8_3_relu, 128, 3, 1, relu=True)
+    
+    conv9_1 = conv_layer(conv8_3_relu, 128, 3, 1, relu=True)
     conv9_2 = conv_layer(conv9_1, 64, 3, 2, relu=True)
     conv9_3 = conv_layer(conv9_2, 32, 3, 2, relu=True)
     conv9_4 = conv_layer(conv9_3, 3, 3, 1, relu=True)
@@ -131,6 +66,49 @@ def net(image):  ### 输入的图像不用normalization
 
     return conv9_4
 
+
+
+def nearest_search(image, palette):
+    '''
+    Palette shape: (16, 16, 3)
+    
+    '''
+    img_shape = image.shape
+    height = img_shape[0] 
+    width = img_shape[1] 
+    new_img = np.zeros(img_shape)
+    for i in range(height):
+        for j in range(width):
+            index = find_min_idx(np.sum((palette - image[i, j, :])**2,2)) ### Bugs
+            new_img[i, j, :] = palette[index[0], index[1], :]
+            
+    return new_img
+            
+
+def find_min_idx(x):
+    k = x.argmin()
+    ncol = x.shape[1]
+    return np.int(k/ncol), k%ncol
+
+
+def get_img(img_path):
+    img = scipy.misc.imread(img_path, mode = 'RGB')
+    return img
+
+def rgb2lab(image):
+    '''
+    L range: 0 ~ 100
+    a range: -128 ~ 127
+    b range: -128 ~ 127
+    
+    '''
+    lab_color = skimage.color.rgb2lab(image)
+    return lab_color
+
+
+def lab2rgb(image):
+    rgb_color = skimage.color.lab2rgb(image)
+    return rgb_color
 
 
 def conv_init_vars(net, out_channels, filter_size, transpose=False):
@@ -206,11 +184,6 @@ def conv_layer_dila(net, num_filters, filter_size, rate, relu=True):
     return net   
 
 def conv_tranpose_layer(net, num_filters, filter_size, strides):
-    '''
-    
-    Deconvolution operation
-    
-    '''
     weights_init = conv_init_vars(net, num_filters, filter_size, transpose=True)
 
     batch_size, rows, cols, in_channels = [i.value for i in net.get_shape()]
@@ -224,21 +197,31 @@ def conv_tranpose_layer(net, num_filters, filter_size, strides):
 
 
 def main():
-    img = get_img('C:\\Users\\Orion_Peng\\Pictures\\Saved Pictures\\dog.jpg')
-    resize_input = scipy.misc.imresize(img, (256, 256))
-    resize_ output= scipy.misc.imresize(img, (64, 64))
     
-    resize_lab = rgb2lab(resize)
+    img_path = 'C:\\Users\\Orion_Peng\\Pictures\\Saved Pictures\\dog.jpg'
 
-    inputimg = np.array([resize_lab])
+    img = get_img(img_path)
 
-    inputimg = tf.cast(inputimg, tf.float32)
+    img_resize = scipy.misc.imresize(img, (256, 256)) #Input image
 
-    palette = net(inputimg)
+    img_resize_lab = rgb2lab(img_resize)
+
+    input_img = np.array([img_resize_lab]) ### Batch 
+
+    input_img = tf.cast(input_img, tf.float32) ### Transform into tensor
+
+    palette = net(input_img)
+    
 
     palette  = tf.reshape(palette, [256, 1, 3])
+    
+    img_resize_2 = scipy.misc.imresize(img, (256, 256))
+    
+    height = img_resize_2.shape[0]
+    
+    width = img_resize_2.shape[1]
 
-    resize_float32 = resize_ output.astype(np.float32)
+    resize_float32 = img_resize_2.astype(np.float32)
 
     resize_float32 = tf.cast(resize_float32, tf.float32)
 
@@ -255,6 +238,17 @@ def main():
         sess.run(tf.global_variables_initializer())
         output_palette = palette.eval()
         output = index.eval()
-
+        
+    '''
+    NNS
+    
+    '''
+    final_palette = output_palette.astype(np.uint8)
+    new_img = np.zeros([height, width, 3])
+    for i in range(height):
+        for j in range(width):
+            new_img[i, j, :] = final_palette[output[i,j], 0, :]
+            
+            
 if __name__ == '__main__':
     main()
