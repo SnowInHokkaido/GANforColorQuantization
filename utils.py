@@ -43,21 +43,6 @@ def nearest_search(image, palette):
     
     return new_img
 
-def nearest_search_lab(ab_color, palette):
-    '''
-    search in Lab space
-    
-    '''
-    ab_color_shape = ab_color.shape
-    height = ab_color_shape[0] 
-    width = ab_color_shape[1] 
-    new_color_space = np.zeros(ab_color_shape)
-    for i in range(height):
-        for j in range(width):
-            index = find_min_idx(np.sum(np.absolute(palette - ab_color[i, j, :]),2)) ### Bugs 减法有问题
-            new_color_space[i, j, :] = palette[index[0], index[1], :]
-    
-    return new_color_space
 
 
 def find_min_idx(x):
