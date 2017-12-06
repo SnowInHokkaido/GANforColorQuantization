@@ -4,7 +4,7 @@ import scipy.misc
 import tensorflow as tf
 
 
-def net(image):
+def net(image, rgb_palette):
     ### 输入的图像不用normalization [batch, height = 256, width = 256, channel = 3]
     with tf.variable_scope('generator'):
         with tf.name_scope('GN_layer1'):
@@ -59,25 +59,18 @@ def net(image):
 
 
         with tf.name_scope('GN_Prob'):
-            prob_distribution = tf.nn.softmax(conv8_3_relu) 
-
-        return prob_distribution
-
-
-def mapping(prob_distribution, quantized_lab):
-    '''
-    
-    prob_distribution: 
-    lab_palette_path: path used to load the palette info (palette should have shape (256, 3)), palette must be in RGB spaces
-    
-    return: color image in LAB space
-    
-    '''
-    mapping_filter = tf.Variable(np.transpose(quantized_lab, [1,0]), dtype=tf.float32, name='mapping_filter')
-    mapping_filter = tf.reshape(mapping_filter, [1, 1, 256, 3])
-    cq_image = tf.nn.conv2d(prob_distribution, mapping_filter, strides=[1,1,1,1], padding='SAME')
-    return cq_image
+            prob_distribution = tf.nn.softmax(conv8_3_relu)
             
+            
+        with tf.name_scope('mapping'):
+            mapping_filter = tf.Variable(np.transpose(rgb_palette, [1,0]), dtype=tf.float32)
+            mapping_filter = tf.reshape(mapping_filter, [1, 1, 256, 3])
+            cq_image = tf.nn.conv2d(prob_distribution, mapping_filter, strides=[1,1,1,1], padding='SAME')
+
+            cq_image  = tf.clip_by_value(cq_image , 0., 255., name=None)
+
+        return cq_image
+      
 
 def conv_init_vars(net, out_channels, filter_size, transpose=False):
     '''
