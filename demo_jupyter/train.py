@@ -131,18 +131,18 @@ def main():
         init = tf.global_variables_initializer()
         sess.run(init)
 
-        for i in range(10000): # Train ratio: DN/GN = 100/1
+        for i in range(iterations): # Train ratio: DN/GN = 100/1
             print('Training Step:' + str(i+1))
             
             batch_img = next_batch(batch_size, imagelist)
 
-            if i % 100 == 0:
+            if i % gn_iterations  == 0:
                 samples = sess.run(G_sample, feed_dict={X: batch_img})
 
             _, D_loss_curr = sess.run([d_train, D_loss], feed_dict={X: batch_img})
             _, G_loss_curr = sess.run([g_train, G_loss], feed_dict={X: batch_img})
 
-            if i % 100 == 0:
+            if i % gn_iterations  == 0:
                 print(D_loss_curr, G_loss_curr)
                 
         save_path = saver.save(sess, "/model.ckpt")
