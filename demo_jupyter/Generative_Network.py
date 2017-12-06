@@ -123,7 +123,7 @@ def conv_layer(net, num_filters, filter_size, strides, relu=True):
     net = tf.nn.conv2d(net, weights_init, strides_shape, padding='SAME')
     
     if relu:
-        net = tf.nn.relu(net)   
+        net = lrelu(net)   
     
     return net        
 
@@ -137,10 +137,9 @@ def conv_layer_dila(net, num_filters, filter_size, rate, relu=True):
     #strides_shape = [1, strides, strides, 1]
     
     net = tf.nn.atrous_conv2d(net, weights_init, rate, 'SAME') # Dialation Convolution
-                 
-    
+        
     if relu:
-        net = tf.nn.relu(net)   
+        net = lrelu(net)   
     
     return net   
 
@@ -154,7 +153,10 @@ def conv_tranpose_layer(net, num_filters, filter_size, strides):
     tf_shape = tf.stack(new_shape)   
     strides_shape = [1,strides,strides,1]
     net = tf.nn.conv2d_transpose(net, weights_init, tf_shape, strides_shape, padding='SAME')
-    return tf.nn.relu(net)
+    return lrelu(net)
+
+def lrelu(net, alpha = 0.2):
+    return tf.nn.relu(net) - alpha * tf.nn.relu(-net)
             
 if __name__ == '__main__':
     main()

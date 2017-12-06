@@ -5,13 +5,14 @@ import scipy.misc
 from argparse import ArgumentParser
 import Generative_Network
 import Discriminative_Network
+import os
 
 ORIGINALPALETTE = 'forest_palette.npy'
 TRAININGDATAPATH = 'train_data.npy'
 VGG_PATH = 'imagenet-vgg-verydeep-19.mat'
 BATCHSIZE = 4
 ITERATIONS = 100000
-TRAININGRATIO = 1000
+TRAININGRATIO = 10
 LEARNINGRATE = 1e-4
 
 def build_parser():
@@ -138,6 +139,13 @@ def main():
 
             if i % gn_iterations  == 0:
                 samples = sess.run(G_sample, feed_dict={X: batch_img})
+                
+                if not os.path.isdir('tmp_output'):
+                    os.mkdir('tmp_output')                  
+                for index in range(batch_size):
+                    tmp_name = str(index)
+                    scipy.misc.imsave('tmp_output/iteration_' + str(i) +'_' + tmp_name +'.jpg', np.squeeze(samples[index,:,:,:]))
+                
 
             _, D_loss_curr = sess.run([d_train, D_loss], feed_dict={X: batch_img})
             _, G_loss_curr = sess.run([g_train, G_loss], feed_dict={X: batch_img})
