@@ -87,7 +87,6 @@ def main():
     batch_size = options.batchsize
     iterations = options.iterations
     trainingratio = options.trainingratio
-    gn_iterations = iterations / trainingratio
     
     print('Data loading completed')
     '''
@@ -137,7 +136,7 @@ def main():
             
             batch_img = next_batch(batch_size, imagelist)
 
-            if i % gn_iterations  == 0:
+            if i % trainingratio  == 0:
                 samples = sess.run(G_sample, feed_dict={X: batch_img})
                 
                 if not os.path.isdir('tmp_output'):
@@ -150,7 +149,7 @@ def main():
             _, D_loss_curr = sess.run([d_train, D_loss], feed_dict={X: batch_img})
             _, G_loss_curr = sess.run([g_train, G_loss], feed_dict={X: batch_img})
 
-            if i % gn_iterations  == 0:
+            if i % trainingratio  == 0:
                 print(D_loss_curr, G_loss_curr)
                 
         save_path = saver.save(sess, "/model.ckpt")

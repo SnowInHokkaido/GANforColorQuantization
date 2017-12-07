@@ -73,36 +73,36 @@ def batch_norm(input_batch):
 def discriminator(input_image, weights): 
     with tf.variable_scope("VGG19_LAYERS"):
         relu5_4 = net_preloaded(input_image, weights)['relu5_4']
-
+    xavier_init = tf.contrib.layers.xavier_initializer()
     with tf.variable_scope('discriminator'):
     #block6 : [batch, 16, 16, 512] => [batch, 4096]
     #if i check the shape of relu5_4, the result must be [batch, 16, 16, 512] not [batch, 8, 8, 512]
         with tf.variable_scope('FC6') as scope:
             shape=int(np.prod(relu5_4.get_shape()[1:]))
-            weight6=tf.Variable(tf.truncated_normal([shape,4096],dtype=tf.float32,stddev=1e-1))
-            bias6=tf.Variable(tf.constant(1.0,shape=[4096],dtype=tf.float32))
+            weight6=tf.Variable(xavier_init([shape,4096]), dtype = tf.float32)            
+            bias6=tf.Variable(tf.constant(0.01,shape=[4096],dtype=tf.float32))        
             flat=tf.reshape(relu5_4,[-1,shape])
             fc6=tf.nn.bias_add(tf.matmul(flat,weight6),bias6)
             fc6=tf.nn.relu(fc6) 
             fc6=batch_norm(fc6)
         #block7 : [batch, 4096] => [batch, 1024]
         with tf.variable_scope('FC7') as scope:	
-            weight7=tf.Variable(tf.truncated_normal([4096,4096],dtype=tf.float32,stddev=1e-1))
-            bias7=tf.Variable(tf.constant(1.0,shape=[4096],dtype=tf.float32))	   
+            weight7=tf.Variable(xavier_init([4096,4096]),dtype=tf.float32)
+            bias7=tf.Variable(tf.constant(0.01,shape=[4096],dtype=tf.float32)) 
             fc7=tf.nn.bias_add(tf.matmul(fc6,weight7),bias7)
             fc7=tf.nn.relu(fc7) 
             fc7=batch_norm(fc7)
         #block8 : [batch, 1024] => [batch, 256]
         with tf.variable_scope('FC8') as scope:	
-            weight8=tf.Variable(tf.truncated_normal([4096,256],dtype=tf.float32,stddev=1e-1))
-            bias8=tf.Variable(tf.constant(1.0,shape=[256],dtype=tf.float32))	   
+            weight8=tf.Variable(xavier_init([4096,256]),dtype=tf.float32)
+            bias8=tf.Variable(tf.constant(0.01,shape=[256],dtype=tf.float32))
             fc8=tf.nn.bias_add(tf.matmul(fc7,weight8),bias8)
             fc8=tf.nn.relu(fc8) 
             fc8=batch_norm(fc8)
         #block8 : [batch, 256] => [batch, 2]
         with tf.variable_scope('Sigmoid9') as scope:
-            weight9=tf.Variable(tf.truncated_normal([256,1],dtype=tf.float32,stddev=1e-1))
-            bias9=tf.Variable(tf.constant(1.0,shape=[1],dtype=tf.float32))
+            weight9=tf.Variable(xavier_init([256, 1]),dtype=tf.float32)
+            bias9=tf.Variable(tf.constant(0.01,shape=[1],dtype=tf.float32))
             logits = tf.nn.bias_add(tf.matmul(fc8,weight9),bias9)   
             prob = tf.nn.sigmoid(logits)  
             

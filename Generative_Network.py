@@ -87,13 +87,23 @@ def conv_init_vars(net, out_channels, filter_size, transpose=False):
         weights_shape = [filter_size, filter_size, out_channels, in_channels]
     
     # weights shape = [Kernal size, kernal size, output kernal, input kernal]
+    
+    xaiver_init_2d = tf.contrib.layers.xavier_initializer_conv2d()
 
-    weights_init = tf.Variable(tf.truncated_normal(weights_shape, stddev = 0.1, seed=1), dtype=tf.float32)
+    weights_init = tf.Variable(xaiver_init_2d(weights_shape), dtype=tf.float32)
     
     return weights_init
 
 
+def bias_init_vars(outputfilter):
 
+    bias_shape = [outputfilter]
+    
+    bias_init = tf.Variable(tf.constant(0.01, shape = bias_shape, dtype=tf.float32))
+    
+    return bias_init
+    
+    
 def batch_norm(net, train=True):
     '''
     
@@ -119,8 +129,10 @@ def conv_layer(net, num_filters, filter_size, strides, relu=True):
     
     '''
     weights_init = conv_init_vars(net, num_filters, filter_size)
+    bias_init = bias_init_vars(num_filters)
     strides_shape = [1, strides, strides, 1]                
     net = tf.nn.conv2d(net, weights_init, strides_shape, padding='SAME')
+    net = tf.nn.bias_add(net, bias_init)
     
     if relu:
         net = lrelu(net)   
@@ -135,9 +147,9 @@ def conv_layer_dila(net, num_filters, filter_size, rate, relu=True):
     '''
     weights_init = conv_init_vars(net, num_filters, filter_size)
     #strides_shape = [1, strides, strides, 1]
-    
+    bias_init = bias_init_vars(num_filters)
     net = tf.nn.atrous_conv2d(net, weights_init, rate, 'SAME') # Dialation Convolution
-        
+    net = tf.nn.bias_add(net, bias_init)    
     if relu:
         net = lrelu(net)   
     
@@ -145,7 +157,7 @@ def conv_layer_dila(net, num_filters, filter_size, rate, relu=True):
 
 def conv_tranpose_layer(net, num_filters, filter_size, strides):
     weights_init = conv_init_vars(net, num_filters, filter_size, transpose=True)
-
+    bias_init = bias_init_vars(num_filters)
     batch_size, rows, cols, in_channels = [i.value for i in net.get_shape()]
     new_rows, new_cols = int(rows * strides), int(cols * strides)
     # new_shape = #tf.pack([tf.shape(net)[0], new_rows, new_cols, num_filters])
@@ -153,6 +165,7 @@ def conv_tranpose_layer(net, num_filters, filter_size, strides):
     tf_shape = tf.stack(new_shape)   
     strides_shape = [1,strides,strides,1]
     net = tf.nn.conv2d_transpose(net, weights_init, tf_shape, strides_shape, padding='SAME')
+    net = tf.nn.bias_add(net, bias_init)
     return lrelu(net)
 
 def lrelu(net, alpha = 0.2):
