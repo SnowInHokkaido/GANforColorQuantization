@@ -2,17 +2,18 @@
 import numpy as np
 import tensorflow as tf
 import scipy.misc
+import skimage.color
 from argparse import ArgumentParser
 import Generative_Network
 import Discriminative_Network
 import os
 
-ORIGINALPALETTE = 'forest_palette.npy'
+ORIGINALPALETTE = 'uv_palette.npy'
 TRAININGDATAPATH = 'train_data.npy'
 VGG_PATH = 'imagenet-vgg-verydeep-19.mat'
 BATCHSIZE = 4
 ITERATIONS = 100000
-TRAININGRATIO = 10
+TRAININGRATIO = 5
 LEARNINGRATE = 1e-4
 
 def build_parser():
@@ -41,7 +42,7 @@ def build_parser():
     
     return parser
 
-def g_network(image, rgb_palette, reuse=False,):
+def g_network(image, rgb_palette, reuse=False):
     if reuse:
         tf.get_variable_scope().reuse_variables()
     fake_image = Generative_Network.net(image, rgb_palette)
@@ -60,9 +61,17 @@ def next_batch(num, data):
     idx = np.arange(0 , len(data))
     np.random.shuffle(idx)
     idx = idx[:num]
-    data_shuffle = np.array([data[i] for i in idx])
-    return data_shuffle
+    data_shuffle_color = np.array([rgb2yuv(data[i]) for i in idx]) ### RGB Space
+    data_shuffle_gray = np.array([np.reshape(rgb2yuv(data[i])[:,:,0], [128, 128, 1]) for i in idx]) ### Gray Space
+    return data_shuffle_color, data_shuffle_gray
 
+def rgb2yuv(image):
+    yuv_color = skimage.color.rgb2yuv(image)
+    return yuv_color
+
+def yuv2rgb(image):
+    rgb_color = skimage.color.yuv2rgb(image)
+    return rgb_color
 
 def main():
     parser = build_parser()
@@ -70,7 +79,7 @@ def main():
     
     #Palette loading
     palettepath = options.palettepath
-    rgb_palette = np.load(palettepath)
+    orig_palette = np.load(palettepath)
     
     #Training Data Preparation
     training_path = options.trainingdatapath
@@ -89,24 +98,22 @@ def main():
     trainingratio = options.trainingratio
     
     print('Data loading completed')
-    '''
-    "/cpu:0"
-    "/gpu:0"
-    "/gpu:1"   
-    '''
-    with tf.device("/cpu:0"):
 
-        X = tf.placeholder(tf.float32, [batch_size, 128, 128, 3])
+    g = tf.Graph()
+    with g.as_default():
+
+        X = tf.placeholder(tf.float32, [batch_size, 128, 128, 1])
+        Y = tf.placeholder(tf.float32, [batch_size, 128, 128, 3])
 
         with tf.name_scope('generating'):
-            G_sample = g_network(X, rgb_palette)
+            G_sample = g_network(X, orig_palette)
 
         with tf.name_scope('discriminating'):
             mean_tensor = tf.cast(np.reshape(mean_pixel, [1,1,1,3]), tf.float32)
-            X_ = X - mean_tensor
-            G_sample_ = G_sample - mean_tensor       
-            D_real, D_logit_real = d_network(X_, weights)
-            D_fake, D_logit_fake = d_network(G_sample_, weights)
+            #Y_ = Y - mean_tensor
+            #G_sample_ = G_sample - mean_tensor       
+            D_real, D_logit_real = d_network(Y, weights) 
+            D_fake, D_logit_fake = d_network(G_sample, weights)
 
         with tf.name_scope('D_loss'):
             D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real, labels=tf.ones_like(D_logit_real)))
@@ -123,35 +130,35 @@ def main():
         with tf.name_scope('train'):
             d_train = tf.train.AdamOptimizer(learningrate).minimize(D_loss, var_list=dvar)
             g_train = tf.train.AdamOptimizer(learningrate).minimize(G_loss, var_list=gvar)
-       
+
         print('Graph establised')
+
         
-    saver = tf.train.Saver()
-    with tf.Session() as sess:
+    with tf.Session(graph = g) as sess:
         init = tf.global_variables_initializer()
         sess.run(init)
+        saver = tf.train.Saver()
 
         for i in range(iterations): # Train ratio: DN/GN = 100/1
             print('Training Step:' + str(i+1))
             
-            batch_img = next_batch(batch_size, imagelist)
+            batch_img_color, batch_img_gray = next_batch(batch_size, imagelist)
 
-            if i % trainingratio  == 0:
-                samples = sess.run(G_sample, feed_dict={X: batch_img})
-                
+            if i % trainingratio == 0:
+                _, G_loss_curr, samples = sess.run([g_train, G_loss, G_sample], feed_dict={X:batch_img_gray, Y: batch_img_color})
                 if not os.path.isdir('tmp_output'):
-                    os.mkdir('tmp_output')                  
+                    os.mkdir('tmp_output')                    
                 for index in range(batch_size):
                     tmp_name = str(index)
-                    scipy.misc.imsave('tmp_output/iteration_' + str(i) +'_' + tmp_name +'.jpg', np.squeeze(samples[index,:,:,:]))
+                    tmp_img = yuv2rgb(np.squeeze(samples[index,:,:,:]))
+                    scipy.misc.imsave('tmp_output/iteration_' + str(i) +'_' + tmp_name +'.jpg', tmp_img)
                 
+            _, D_loss_curr = sess.run([d_train, D_loss], feed_dict={X:batch_img_gray, Y: batch_img_color})
+        
 
-            _, D_loss_curr = sess.run([d_train, D_loss], feed_dict={X: batch_img})
-            _, G_loss_curr = sess.run([g_train, G_loss], feed_dict={X: batch_img})
-
-            if i % trainingratio  == 0:
-                print(D_loss_curr, G_loss_curr)
-                
+            if i % trainingratio == 0:
+                print(D_loss_curr, G_loss_curr)      
+              
         save_path = saver.save(sess, "/model.ckpt")
 
 if __name__ == '__main__':

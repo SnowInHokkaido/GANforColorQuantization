@@ -4,15 +4,14 @@ import scipy.misc
 import tensorflow as tf
 
 
-def net(image, rgb_palette):
-    ### 输入的图像不用normalization [batch, height = 256, width = 256, channel = 3]
+def net(image, orig_palette):  ### 输入的图像不用normalization [batch, height = 128, width = 128, channel = 1]
     with tf.variable_scope('generator'):
         with tf.name_scope('GN_layer1'):
             normalization = batch_norm(image, train=True)
-            conv1_1_relu = conv_layer(normalization, 64, 3, 1, relu=True) #[batch, height = 256, width = 256, channel = 64]
+            conv1_1_relu = conv_layer(normalization, 64, 3, 1, relu=True) #[batch, height = 128, width = 128, channel = 64]
             conv1_2_relu = conv_layer(conv1_1_relu, 64, 3, 1, relu=True)
             conv1_2norm = batch_norm(conv1_2_relu, train=True)
-
+        
         with tf.name_scope('GN_layer2'):
             conv2_1_relu = conv_layer(conv1_2norm, 128, 3, 1, relu=True)
             conv2_2_relu = conv_layer(conv1_1_relu, 128, 3, 2, relu=True) 
@@ -33,43 +32,41 @@ def net(image, rgb_palette):
             conv4_2_relu = conv_layer_dila(conv4_1_relu, 512, 3, 1, relu=True)
             conv4_3_relu = conv_layer_dila(conv4_2_relu, 512, 3, 1, relu=True)
             conv4_3norm = batch_norm(conv4_3_relu, train=True)
-
+            
         with tf.name_scope('GN_layer5'):
             conv5_1_relu = conv_layer(conv4_3norm, 512, 3, 1, relu=True)
             conv5_2_relu = conv_layer_dila(conv5_1_relu, 512, 3, 1, relu=True)
             conv5_3_relu = conv_layer_dila(conv5_2_relu, 512, 3, 1, relu=True)
             conv5_3norm = batch_norm(conv5_3_relu, train=True)
-
+            
         with tf.name_scope('GN_layer6'):    
-            conv6_1_relu = conv_tranpose_layer(conv5_3norm, 256, 3, 2)
-            conv6_2_relu = conv_layer_dila(conv6_1_relu, 256, 3, 1, relu=True)
-            conv6_3_relu = conv_layer_dila(conv6_2_relu, 256, 3, 1, relu=True)
+            conv6_1_relu = conv_layer(conv5_3norm, 512, 3, 1)
+            conv6_2_relu = conv_layer_dila(conv6_1_relu, 512, 3, 1, relu=True)
+            conv6_3_relu = conv_layer_dila(conv6_2_relu, 512, 3, 1, relu=True)
             conv6_3norm = batch_norm(conv6_3_relu, train=True)   
-
+            
         with tf.name_scope('GN_layer7'):    
-            conv7_1_relu = conv_tranpose_layer(conv6_3norm, 256, 3, 2)
-            conv7_2_relu = conv_layer(conv7_1_relu, 256, 3, 1, relu=True)
-            conv7_3_relu = conv_layer(conv7_2_relu, 256, 3, 1, relu=True)
-            conv7_3norm = batch_norm(conv7_3_relu, train=True)   
+            conv7_1_relu = conv_layer(conv6_3norm, 512, 3, 1)
+            conv7_2_relu = conv_layer_dila(conv7_1_relu, 512, 3, 1, relu=True)
+            conv7_3_relu = conv_layer_dila(conv7_2_relu, 512, 3, 1, relu=True)
+            #conv7_3norm = batch_norm(conv7_3_relu, train=True)   
 
         with tf.name_scope('GN_layer8'):    
-            conv8_1_relu = conv_tranpose_layer(conv7_3norm, 256, 3, 2)
-            conv8_2_relu = conv_layer(conv8_1_relu, 256, 3, 1, relu=True)
-            conv8_3_relu = conv_layer(conv8_2_relu, 256, 3, 1, relu=True) ### Output batch x 256 x 256 x 256
-
-
+            conv8_1_relu = conv_tranpose_layer(conv7_3_relu, 256, 3, 2, relu = False)
+        
         with tf.name_scope('GN_Prob'):
-            prob_distribution = tf.nn.softmax(conv8_3_relu)
-            
-            
+            prob_distribution = tf.nn.softmax(conv8_1_relu) 
+        
         with tf.name_scope('mapping'):
-            mapping_filter = tf.Variable(np.transpose(rgb_palette, [1,0]), dtype=tf.float32)
-            mapping_filter = tf.reshape(mapping_filter, [1, 1, 256, 3])
+            mapping_filter = tf.Variable(np.transpose(orig_palette, [1,0]), dtype=tf.float32)
+            mapping_filter = tf.reshape(mapping_filter, [1, 1, 256, 2])
             cq_image = tf.nn.conv2d(prob_distribution, mapping_filter, strides=[1,1,1,1], padding='SAME')
+            
+        cq_image = tf.image.resize_images(cq_image, size = (128, 128), method = 0)
+        
+        yuv_image = tf.concat((image, cq_image), axis = 3)
 
-            cq_image  = tf.clip_by_value(cq_image , 0., 255., name=None)
-
-        return cq_image
+        return yuv_image
       
 
 def conv_init_vars(net, out_channels, filter_size, transpose=False):
@@ -155,7 +152,7 @@ def conv_layer_dila(net, num_filters, filter_size, rate, relu=True):
     
     return net   
 
-def conv_tranpose_layer(net, num_filters, filter_size, strides):
+def conv_tranpose_layer(net, num_filters, filter_size, strides, relu = True):
     weights_init = conv_init_vars(net, num_filters, filter_size, transpose=True)
     bias_init = bias_init_vars(num_filters)
     batch_size, rows, cols, in_channels = [i.value for i in net.get_shape()]
@@ -166,9 +163,11 @@ def conv_tranpose_layer(net, num_filters, filter_size, strides):
     strides_shape = [1,strides,strides,1]
     net = tf.nn.conv2d_transpose(net, weights_init, tf_shape, strides_shape, padding='SAME')
     net = tf.nn.bias_add(net, bias_init)
-    return lrelu(net)
+    if relu:
+        net = lrelu(net)   
+    return net
 
-def lrelu(net, alpha = 0.2):
+def lrelu(net, alpha = 0.1):
     return tf.nn.relu(net) - alpha * tf.nn.relu(-net)
             
 if __name__ == '__main__':
