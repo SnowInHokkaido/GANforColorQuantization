@@ -14,7 +14,7 @@ def net(image, orig_palette):  ### 输入的图像不用normalization [batch, he
         
         with tf.name_scope('GN_layer2'):
             conv2_1_relu = conv_layer(conv1_2norm, 128, 3, 1, relu=True)
-            conv2_2_relu = conv_layer(conv1_1_relu, 128, 3, 2, relu=True) 
+            conv2_2_relu = conv_layer(conv2_1_relu, 128, 3, 2, relu=True) 
             conv2_2norm = batch_norm(conv2_2_relu, train=True)
 
         with tf.name_scope('GN_layer3'):
