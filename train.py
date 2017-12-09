@@ -8,13 +8,13 @@ import Generative_Network
 import Discriminative_Network
 import os
 
-ORIGINALPALETTE = 'uv_palette.npy'
+ORIGINALPALETTE = 'rgb_std_palette.npy'
 TRAININGDATAPATH = 'train_data.npy'
 VGG_PATH = 'imagenet-vgg-verydeep-19.mat'
-BATCHSIZE = 8
+BATCHSIZE = 4
 ITERATIONS = 100000
-TRAININGRATIO = 3
-LEARNINGRATE = 1e-3
+TRAININGRATIO = 2
+LEARNINGRATE = 5e-4
 
 def build_parser():
     parser = ArgumentParser()
@@ -61,17 +61,21 @@ def next_batch(num, data):
     idx = np.arange(0 , len(data))
     np.random.shuffle(idx)
     idx = idx[:num]
-    data_shuffle_color = np.array([rgb2yuv(data[i]) for i in idx]) ### RGB Space
-    data_shuffle_gray = np.array([np.reshape(rgb2yuv(data[i])[:,:,0], [128, 128, 1]) for i in idx]) ### Gray Space
+    data_shuffle_color = np.array([data[i] for i in idx])/255. ### RGB Space
+    data_shuffle_gray = np.array([np.reshape(rgb2gray(data[i]), [128, 128, 1]) for i in idx]) ### Gray Space
     return data_shuffle_color, data_shuffle_gray
 
-def rgb2yuv(image):
-    yuv_color = skimage.color.rgb2yuv(image)
-    return yuv_color
+def rgb2lab(image):
+    lab_color = skimage.color.rgb2lab(image)
+    return lab_color
 
-def yuv2rgb(image):
-    rgb_color = skimage.color.yuv2rgb(image)
+def lab2rgb(image):
+    rgb_color = skimage.color.lab2rgb(image)
     return rgb_color
+
+def rgb2gray(image):
+    gray_color = skimage.color.rgb2gray(image)
+    return gray_color
 
 def main():
     parser = build_parser()
@@ -125,7 +129,9 @@ def main():
 
         tvar = tf.trainable_variables()
         dvar = [var for var in tvar if 'discriminator' in var.name] # Find variable in DN
-        gvar = [var for var in tvar if 'generator' in var.name] # Find variable in GB
+        gvar = [var for var in tvar if 'generator' in var.name]
+        palettevar = [var for var in tvar if 'mapping' in var.name]# Find variable in GB
+        palette_output = palettevar[0]
 
         with tf.name_scope('train'):
             d_train = tf.train.AdamOptimizer(learningrate).minimize(D_loss, var_list=dvar)
@@ -146,12 +152,15 @@ def main():
 
             if i % trainingratio == 0:
                 _, G_loss_curr, samples = sess.run([g_train, G_loss, G_sample], feed_dict={X:batch_img_gray, Y: batch_img_color})
+                output_palette = palette_output.eval()
                 if not os.path.isdir('tmp_output'):
                     os.mkdir('tmp_output')                    
                 for index in range(batch_size):
                     tmp_name = str(index)
-                    tmp_img = yuv2rgb(np.squeeze(samples[index,:,:,:]))
+                    tmp_img = np.squeeze(samples[index,:,:,:])
                     scipy.misc.imsave('tmp_output/iteration_' + str(i) +'_' + tmp_name +'.jpg', tmp_img)
+                    
+                np.save('tmp_output/output_palette_' + str(i)+ '.npy', output_palette)
                 
             _, D_loss_curr = sess.run([d_train, D_loss], feed_dict={X:batch_img_gray, Y: batch_img_color})
         

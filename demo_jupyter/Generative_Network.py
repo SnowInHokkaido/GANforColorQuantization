@@ -40,33 +40,36 @@ def net(image, orig_palette):  ### 输入的图像不用normalization [batch, he
             conv5_3norm = batch_norm(conv5_3_relu, train=True)
             
         with tf.name_scope('GN_layer6'):    
-            conv6_1_relu = conv_layer(conv5_3norm, 512, 3, 1)
+            conv6_1_relu = conv_layer(conv5_3norm, 512, 3, 1,relu=True)
             conv6_2_relu = conv_layer_dila(conv6_1_relu, 512, 3, 1, relu=True)
             conv6_3_relu = conv_layer_dila(conv6_2_relu, 512, 3, 1, relu=True)
             conv6_3norm = batch_norm(conv6_3_relu, train=True)   
             
         with tf.name_scope('GN_layer7'):    
-            conv7_1_relu = conv_layer(conv6_3norm, 512, 3, 1)
-            conv7_2_relu = conv_layer_dila(conv7_1_relu, 512, 3, 1, relu=True)
-            conv7_3_relu = conv_layer_dila(conv7_2_relu, 512, 3, 1, relu=True)
+            conv7_1_relu = conv_tranpose_layer(conv6_3norm, 256, 3, 1, relu = True)
+            conv7_2_relu = conv_layer(conv7_1_relu, 256, 3, 1, relu=True)
+            conv7_3_relu = conv_layer(conv7_2_relu, 256, 3, 1, relu=True)
             conv7_3norm = batch_norm(conv7_3_relu, train=True)   
 
         with tf.name_scope('GN_layer8'):    
-            conv8_1_relu = conv_tranpose_layer(conv7_3norm, 256, 3, 2, relu = False)
+            conv8_1_relu = conv_layer(conv7_3norm, 256, 3, 1, relu=True)
+            conv8_2_relu = conv_layer(conv8_1_relu, 256, 3, 1, relu=True)
+            conv8_3_relu = conv_layer(conv8_2_relu, 256, 3, 1, relu=True) 
         
         with tf.name_scope('GN_Prob'):
-            prob_distribution = tf.nn.softmax(conv8_1_relu) 
+            prob_distribution = tf.nn.softmax(conv8_3_relu) 
         
         with tf.name_scope('mapping'):
-            mapping_filter = tf.constant(np.transpose(orig_palette, [1,0]), dtype=tf.float32)
-            mapping_filter = tf.reshape(mapping_filter, [1, 1, 256, 2])
+            mapping_filter = tf.Variable(np.transpose(orig_palette, [1,0]), dtype=tf.float32)
+            mapping_filter = tf.reshape(mapping_filter, [1, 1, 256, 3])
             cq_image = tf.nn.conv2d(prob_distribution, mapping_filter, strides=[1,1,1,1], padding='SAME')
             
-        cq_image = tf.image.resize_images(cq_image, size = (128, 128), method = 0)
-        
-        yuv_image = tf.concat((image, cq_image), axis = 3)
+        cq_image = tf.image.resize_images(cq_image, size = (128, 128), method = 1)
 
-        return yuv_image
+            
+        #lab_image = tf.concat((image, cq_image), axis = 3)
+
+        return cq_image
       
 
 def conv_init_vars(net, out_channels, filter_size, transpose=False):
@@ -85,7 +88,7 @@ def conv_init_vars(net, out_channels, filter_size, transpose=False):
     
     # weights shape = [Kernal size, kernal size, output kernal, input kernal]
     
-    xaiver_init_2d = tf.contrib.layers.xavier_initializer_conv2d()
+    xaiver_init_2d = tf.contrib.layers.xavier_initializer_conv2d(uniform=False) ### Change 
 
     weights_init = tf.Variable(xaiver_init_2d(weights_shape), dtype=tf.float32)
     
@@ -167,7 +170,7 @@ def conv_tranpose_layer(net, num_filters, filter_size, strides, relu = True):
         net = lrelu(net)   
     return net
 
-def lrelu(net, alpha = 0.1):
+def lrelu(net, alpha = 0):
     return tf.nn.relu(net) - alpha * tf.nn.relu(-net)
             
 if __name__ == '__main__':
