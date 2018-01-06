@@ -4,7 +4,7 @@ import scipy.misc
 import tensorflow as tf
 
 
-def net(image, orig_palette):  ### 输入的图像不用normalization [batch, height = 128, width = 128, channel = 1]
+def net(image, orig_palette):  ### [batch, height = 128, width = 128, channel = 1]
     with tf.variable_scope('generator'):
         with tf.name_scope('GN_layer1'):
             normalization = batch_norm(image, train=True)
@@ -22,11 +22,7 @@ def net(image, orig_palette):  ### 输入的图像不用normalization [batch, he
             conv3_2_relu = conv_layer(conv3_1_relu, 256, 3, 1, relu=True)
             conv3_3_relu = conv_layer(conv3_2_relu, 256, 3, 2, relu=True)
             conv3_3norm = batch_norm(conv3_3_relu, train=True)
-        '''
-        conv4_1 (Stride:1,pad:1 dilation: 1)> relu4_1 > conv4_2(same) > relu4_2 > conv4_3(same) > relu4_3 > conv4_3_norm
-        tf.nn.atrous_conv2d(net, weights_init, rate, 'SAME')
-        conv_layer_dila(net, num_filters, filter_size, rate, relu=True)
-        '''
+
         with tf.name_scope('GN_layer4'):
             conv4_1_relu = conv_layer(conv3_3norm, 512, 3, 2, relu=True)
             conv4_2_relu = conv_layer_dila(conv4_1_relu, 512, 3, 1, relu=True)
@@ -66,8 +62,6 @@ def net(image, orig_palette):  ### 输入的图像不用normalization [batch, he
             
         cq_image = tf.image.resize_images(cq_image, size = (128, 128), method = 1)
 
-            
-        #lab_image = tf.concat((image, cq_image), axis = 3)
 
         return cq_image
       

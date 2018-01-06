@@ -1,0 +1,9 @@
+tensorflow
+numpy
+scipy
+scikit-learn
+matplotlib
+jupyter notebook
+scikit-image
+
+VGG model

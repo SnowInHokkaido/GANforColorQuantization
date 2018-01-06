@@ -106,8 +106,6 @@ def discriminator(input_image, weights):
             logits = tf.nn.bias_add(tf.matmul(fc8,weight9),bias9)   
             prob = tf.nn.sigmoid(logits)  
             
-        #D_logit = tf.matmul(D_h1, D_W2) + D_b2
-        #D_prob = tf.nn.sigmoid(D_logit)
                            
     return prob, logits
 

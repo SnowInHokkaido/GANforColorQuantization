@@ -8,11 +8,11 @@ import Generative_Network
 import Discriminative_Network
 import os
 
-ORIGINALPALETTE = 'rgb_std_palette.npy'
+ORIGINALPALETTE = 'forest_palette.npy'
 TRAININGDATAPATH = 'train_data.npy'
 VGG_PATH = 'imagenet-vgg-verydeep-19.mat'
 BATCHSIZE = 4
-ITERATIONS = 100000
+ITERATIONS = 1000
 TRAININGRATIO = 2
 LEARNINGRATE = 5e-4
 
@@ -145,7 +145,7 @@ def main():
         sess.run(init)
         saver = tf.train.Saver()
 
-        for i in range(iterations): # Train ratio: DN/GN = 100/1
+        for i in range(iterations): 
             print('Training Step:' + str(i+1))
             
             batch_img_color, batch_img_gray = next_batch(batch_size, imagelist)
@@ -154,12 +154,7 @@ def main():
                 _, G_loss_curr, samples = sess.run([g_train, G_loss, G_sample], feed_dict={X:batch_img_gray, Y: batch_img_color})
                 output_palette = palette_output.eval()
                 if not os.path.isdir('tmp_output'):
-                    os.mkdir('tmp_output')                    
-                for index in range(batch_size):
-                    tmp_name = str(index)
-                    tmp_img = np.squeeze(samples[index,:,:,:])
-                    scipy.misc.imsave('tmp_output/iteration_' + str(i) +'_' + tmp_name +'.jpg', tmp_img)
-                    
+                    os.mkdir('tmp_output')                   
                 np.save('tmp_output/output_palette_' + str(i)+ '.npy', output_palette)
                 
             _, D_loss_curr = sess.run([d_train, D_loss], feed_dict={X:batch_img_gray, Y: batch_img_color})

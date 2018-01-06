@@ -1,15 +1,20 @@
 # Color Quantization with Generative Adversarial Network
 
-Normally, there are 2 steps in color quantization: first, define a palette based on 
-the colors of the image and then for each pixel, replace its color with a closest color 
-in the palette to generate a new image. In this project, a conditional GAN would be 
-trained. The generative network(GN) will have a structure similar to the one in Pix2pix. 
-The input of the generative network will be a 24 bit color image and the output will be 
-a palette (i.e. 256-color palette). The colors of the original image will be replaced by 
-the ones in the generated palette by means of nearest neighbor search. After that, the 
-modified image will be inputted into the discriminative network (DN) and DN will compare 
-the ground truth and the modified image, to estimate which one is the ground truth. DN 
-will improve decision boundary according to cross entropy loss function. GN will improve 
-weighting through backpropagation and get new color palette in next round. The whole 
-process would iterate a thousand times. The training set consist of 500 24-bit color 
-images. 
+Color quantization is an important image processing methodology which can be applied in image displaying, 
+image compressing and color printing. Traditional quantization methods 
+are essentially based on clustering-based approach such as LBG algorithm and 
+partitioning-based approach like median-cut algorithm. 
+
+In this project, our contribution is we suggest a new Neural Network-based approach for image color quantization tasks.
+Conditional Generative Adversarial Networks are built to achieve the palette generation and
+the color reduction work. The trained Generative Adversarial Network will be capable of
+generating customized palette from a predefined standard color palette. Normally, the
+output of a well-trained generator would be three-channel color images. However, what we
+want the generator to produce is a color palette rather than a color image. Inspired by
+Zhang, we regard the palette as a convolution filter in the generative network and then
+come up with a special structure for the generator. In our design, the palette can be updated
+through back-propagation and extracted from the generator after the training
+
+Compared to the traditional color quantization methods, we demonstrate that our network generates palette
+which can make the reconstructed images have similar perceptual quality with traditional
+color quantization algorithms.
